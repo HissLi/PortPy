@@ -64,3 +64,9 @@ Thumbs.db
 
 # internal-only equivalence test (kept local, not pushed to GitHub)
 tests/test_modules_match_original.py
+
+# OpenKBP
+OpenKBP/
+
+# Hugging Face data
+hugging_face_data/
