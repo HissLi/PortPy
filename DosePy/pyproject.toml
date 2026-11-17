@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dosepy"
+version = "0.1.0"
+description = "Anatomy-only (7-channel) full dose prediction toolkit extracted from PortPy"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0 WITH Commons-Clause" }
+authors = [
+    { name = "DosePy contributors" },
+]
+dependencies = [
+    "portpy",
+    "torch>=2.7.0",
+    "numpy>=1.26.0",
+    "natsort>=8.1.0",
+    "scipy>=1.13",
+    "scikit-image>=0.23",
+    "SimpleITK>=2.0.2",
+    "pydicom>=2.2.0",
+    "pandas>=2.2.0",
+    "matplotlib>=3.8",
+    "Pillow>=10.0",
+    "dominate>=2.6.0",
+    "cvxpy>=1.1.18",
+]
+
+[project.optional-dependencies]
+mednext = [
+    "nnunet_mednext @ git+https://github.com/MIC-DKFZ/MedNeXt.git",
+]
+mosek = ["Mosek>=9.3.14"]
+data = ["huggingface-hub>=0.34.3"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dosepy", "dosepy.*"]
+
+[tool.setuptools.package-data]
+"dosepy" = ["configs/scorecard/*.json", "configs/data_splits/*.json"]

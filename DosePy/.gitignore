@@ -1,0 +1,12 @@
+# DosePy local artifacts
+workspace/
+checkpoints/
+results/
+*.nrrd
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.DS_Store

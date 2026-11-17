@@ -1,0 +1,35 @@
+# DosePy runtime dependencies
+# ---------------------------------------------------------------------------
+# PortPy remains a dependency: DosePy uses portpy.photon for data access
+# (DataExplorer / CT / Structures / Beams / InfluenceMatrix / Plan).
+# Install it from PyPI (pip install portpy) or from the PortPy checkout.
+portpy
+
+# Deep learning
+torch>=2.7.0
+
+# Preprocessing / geometry
+numpy>=1.26.0
+natsort>=8.1.0
+scipy>=1.13
+scikit-image>=0.23
+SimpleITK>=2.0.2
+pydicom>=2.2.0
+
+# Evaluation / visualisation
+pandas>=2.2.0
+matplotlib>=3.8
+Pillow>=10.0
+dominate>=2.6.0
+
+# Downstream fluence optimisation (optional, but installed with PortPy anyway)
+cvxpy>=1.1.18
+
+# Optional: MedNeXt generators (mednext / mednext_attn / mednext_duo)
+# pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
+#
+# Optional: MOSEK solver for the downstream fluence optimisation
+# pip install Mosek
+#
+# Optional: download PortPy data from Hugging Face
+# pip install "portpy[data]"
