@@ -37,6 +37,11 @@ DosePy differences (behaviour is otherwise the same):
   not leak into the parser;
 - loss/metric history is written to one CSV file (not several ``.xlsx`` files,
   which required ``openpyxl``);
+- every optimizer step is written and flushed to
+  ``<checkpoints_dir>/<name>/train_step_loss.csv``;
+- a live loss curve is drawn and saved to ``<checkpoints_dir>/<name>/loss_curve.png``
+  during training (enabled by default; disable with ``plot_loss=False`` or
+  ``--no_plot_loss``);
 - :func:`train` returns the history dict, ready for
   :func:`dosepy.visualization.plot_training_history`.
 """
@@ -53,6 +58,7 @@ from dosepy.data import create_dataset
 from dosepy.models import create_model
 from dosepy.options import TrainOptions
 from dosepy.utils.visualizer import Visualizer
+from dosepy.visualization.training_plots import LossCurvePlotter
 
 __all__ = ["train", "main"]
 
@@ -141,6 +147,7 @@ def main(opt):
         "val_corr": [],
         "val_nrmse": [],
     }
+    loss_plotter = None
 
     try:
         print("Saving console output to: {}".format(console_log_path))
@@ -165,6 +172,13 @@ def main(opt):
         model = create_model(opt)
         model.setup(opt)
         visualizer = Visualizer(opt)
+
+        loss_plotter = LossCurvePlotter(
+            out_dir=run_dir,
+            enabled=getattr(opt, "plot_loss", True),
+            freq=getattr(opt, "plot_freq", 1),
+            title=opt.name,
+        )
 
         total_iters = 0
         best_val_mae = float("inf")
@@ -206,6 +220,12 @@ def main(opt):
                         )
 
                     losses = model.get_current_losses()
+                    if loss_plotter is not None:
+                        # Persist every optimizer step immediately; this is
+                        # independent of whether the PNG plot is enabled.
+                        loss_plotter.record_step(
+                            epoch, epoch_iter, total_iters, losses
+                        )
                     total_loss_epoch += sum(losses.values())
                     if total_iters % opt.print_freq == 0:
                         t_comp = (time.time() - iter_start_time) / opt.batch_size
@@ -282,6 +302,11 @@ def main(opt):
                 )
                 f.flush()
 
+                if loss_plotter is not None:
+                    loss_plotter.update(
+                        epoch, train_loss, val["loss"], val["mae"]
+                    )
+
         total_time = time.time() - total_time_start
         print("Total Time for training is {} seconds".format(total_time))
         print(
@@ -299,9 +324,13 @@ def main(opt):
         return history
 
     finally:
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-        log_file.close()
+        try:
+            if loss_plotter is not None:
+                loss_plotter.close()
+        finally:
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+            log_file.close()
 
 
 def train(args=None):

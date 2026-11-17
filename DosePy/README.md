@@ -1,8 +1,15 @@
 # DosePy
 
-**PortPy 全剂量预测（Full / Total Dose Prediction）代码整理版 —— anatomy-only / 7 通道**
+**PortPy 全剂量预测（Full / Total Dose Prediction）代码整理版 —— PortPy 7 通道 + OpenKBP 11 通道**
 
-DosePy 把 PortPy 中与 **total dose prediction** 相关的代码，从数据预处理、模型定义、参数、训练/测试、单病例推理，到评估与可视化，整理成一个独立的 Python 包，并配有一份中文全流程 notebook。本版本是 **anatomy-only 变体**：网络只接收 CT、OAR mask 和 PTV，不接收 BEAM 通道；因此不需要把 beam 作为模型输入，也不需要 `Beams/` 元数据或 influence matrix；这些只在评估/下游优化时使用。
+DosePy 把 PortPy 中与 **total dose prediction** 相关的代码，从数据预处理、模型定义、参数、训练/测试、单病例推理，到评估与可视化，整理成一个独立的 Python 包，并配有一份中文全流程 notebook。
+
+DosePy 现在支持两条输入路径：
+
+- **PortPy 路径**：anatomy-only 7 通道（CT + 4 个 OAR + PTV），不接收 BEAM；
+- **OpenKBP 路径**：直接读取 OpenKBP 稀疏 CSV，11 通道（CT + 7 个 OAR + 3 个 PTV），见 [6.1 OpenKBP](#61-openkbp)。
+
+PortPy 路径不需要把 beam 作为模型输入，也不需要 `Beams/` 元数据或 influence matrix；这些只在评估/下游优化时使用。OpenKBP 路径不依赖 PortPy。
 
 > [`notebooks/01_full_dose_prediction_tutorial.ipynb`](notebooks/01_full_dose_prediction_tutorial.ipynb)
 
@@ -29,7 +36,9 @@ DosePy 的网络输入为 **7 通道**，输出 **1 通道**剂量：
 
 空间尺寸固定为 `128 × 128 × 128`，由 PortPy 的 calculation box 裁剪后重采样得到。
 
-> **与 PortPy 官方实现的区别**：PortPy 官方 total-dose baseline 是 8 通道（CT + BEAM + OAR + PTV），其中 BEAM 是 `A @ 1` 的 beam-sum dose prior。DosePy 当前版本按用户要求改成 **anatomy-only 7 通道**，因此 **不能加载 PortPy 官方 8 通道 checkpoint**；模型输入只需要 CT 和结构 mask，训练时另外需要 planner dose 作为监督标签。
+> 上表是 **PortPy 路径**的布局。OpenKBP 路径使用 11 通道（CT + 7 OAR + 3 PTV），见 6.1 节。
+
+> **与 PortPy 官方实现的区别**：PortPy 官方 total-dose baseline 是 8 通道（CT + BEAM + OAR + PTV），其中 BEAM 是 `A @ 1` 的 beam-sum dose prior。DosePy 的 **PortPy 路径**按用户要求改成 **anatomy-only 7 通道**，因此 **不能加载 PortPy 官方 8 通道 checkpoint**；模型输入只需要 CT 和结构 mask，训练时另外需要 planner dose 作为监督标签。**OpenKBP 路径**是 11 通道（CT + 7 OAR + 3 PTV），见 6.1 节。
 
 支持两个 site：
 
@@ -44,7 +53,7 @@ DosePy 的网络输入为 **7 通道**，输出 **1 通道**剂量：
 
 DosePy **不是** PortPy 的替代品，而是从 `portpy.ai` 中抽出的 total-dose 代码，并改造成 anatomy-only 变体：
 
-- **已迁移到 DosePy**：`portpy.ai.preprocess`（全剂量部分）、`portpy.ai.data`、`portpy.ai.models`（全剂量模型）、`portpy.ai.options`、`train.py`、`test.py`、`infer_runner.py`、`util`，以及评估/可视化所需的 DVH、scorecard 与画图代码。迁移后已移除 BEAM 通道，改为 7 通道 anatomy-only 输入。
+- **已迁移到 DosePy**：`portpy.ai.preprocess`（全剂量部分）、`portpy.ai.data`、`portpy.ai.models`（全剂量模型）、`portpy.ai.options`、`train.py`、`test.py`、`infer_runner.py`、`util`，以及评估/可视化所需的 DVH、scorecard 与画图代码。迁移后已移除 BEAM 通道，PortPy 路径改为 7 通道 anatomy-only 输入；OpenKBP 路径使用独立的 11 通道 dataset。
 - **仍依赖 PortPy**：`portpy.photon` 中的 `DataExplorer`（DosePy 用 `AnatomyOnlyDataExplorer`，不要求 `Beams/`）、`CT`、`Structures`、`ClinicalCriteria`、`Plan`、`Optimization`。预测本身不需要 `Beams` / `InfluenceMatrix`；只有下游 scorecard / 通量优化需要它们。
 - **不在范围内**：PortPy.AI Task 1 的 beamlet dose prediction（`beamlet_*` 模型、`build_apred_batch.py`、`inf_matrix_predictor.py`、ray geometry 等），以及 VMAT/IMRT 优化教程。
 - **本版本移除**：BEAM 输入通道、beam-sum 归一化、训练/推理对 `Beams` / `InfluenceMatrix` 的依赖，以及 PortPy 8 通道 checkpoint 兼容性。
@@ -78,6 +87,8 @@ DosePy/
     │   ├── base_dataset.py         # BaseDataset + 3D 增强 + 7 通道布局
     │   ├── dosepred3d_dataset.py   # 训练/验证/测试数据集
     │   ├── single_dataset.py       # 推理数据集（无 GT）
+    │   ├── openkbp_io.py           # OpenKBP 稀疏 CSV -> dense arrays + cache
+    │   ├── openkbp_dataset.py      # OpenKBP 11 通道 dataset
     │   ├── image_folder.py         # npz 文件枚举
     │   └── __init__.py             # dataset 工厂
     ├── models/
@@ -98,10 +109,11 @@ DosePy/
     │   └── __init__.py                # build_opt
     ├── train.py                       # 训练 + 验证 + checkpoint + CSV 历史
     ├── test.py                        # 测试/推理 + per-patient metrics
-    ├── infer.py                       # InferenceRunner（模型只加载一次）
+    ├── infer.py                       # InferenceRunner + OpenKBP 单病例推理
     ├── evaluation/
     │   ├── metrics.py                 # MAE/RMSE/R²/Pearson/nRMSE（整体 + 分结构）
     │   ├── dvh.py                     # DVH 曲线、D95/Dmean/V20 等
+    │   ├── openkbp.py                 # OpenKBP 整体/per-structure/DVH 评估
     │   └── scorecard.py               # DVH scorecard（PortPy scorecard 移植）
     ├── visualization/
     │   ├── dose_plots.py              # 预处理检查、切片/差分图
@@ -118,6 +130,15 @@ DosePy/
     └── configs/
         ├── scorecard/                 # 从 PortPy 复制的 lung/prostate scorecard
         └── data_splits/               # 从 PortPy 复制的冻结 train/val/test 划分
+```
+
+`OpenKBP/` 目录只放 OpenKBP 原始数据和唯一的实验入口：
+
+```text
+DosePy/OpenKBP/
+├── main.py                 # 数据路径/参数/模型设置 + 分阶段调用
+├── provided-data/          # 原始 CSV（gitignore）
+└── work/                   # checkpoints/results（gitignore）
 ```
 
 ---
@@ -150,6 +171,10 @@ pip install "portpy[data]"
 ```
 
 > **注意**：`unet_128` / `unet_256` 不需要 MedNeXt，是最小可运行配置。
+>
+> **Python 版本**：建议使用 **Python 3.12**。当前 PortPy checkout 的
+> `portpy/photon/vmat_scp/vmat_scp_optimization.py` 使用了 Python 3.12 的
+> f-string 语法；在 Python 3.11 下导入 `portpy.photon` 会报 `SyntaxError`。
 
 ---
 
@@ -191,6 +216,123 @@ pp.download_portpy_data(
 ---
 
 ## 6. 快速开始
+
+### 6.1 OpenKBP
+
+OpenKBP 数据已经放在 `DosePy/OpenKBP/provided-data` 下，目录结构为：
+
+```text
+DosePy/OpenKBP/provided-data/
+├── train-pats/pt_*/        # 200 patients
+├── validation-pats/pt_*/   # 40 patients
+└── test-pats/pt_*/         # 100 patients
+```
+
+每个病人目录包含 `ct.csv`、`dose.csv`、`possible_dose_mask.csv`、
+`PTV56/63/70.csv` 以及可选的 OAR CSV。DosePy 会直接读取这些 CSV，
+不需要 PortPy 预处理，也不需要 `data_preprocess` / `split_preprocessed_dataset`。
+
+OpenKBP 输入为 **11 通道**：
+
+```text
+[CT, Brainstem, SpinalCord, RightParotid, LeftParotid,
+ Mandible, Esophagus, Larynx, PTV56, PTV63, PTV70]
+```
+
+`possible_dose_mask` 作为单独的 `BODY` 返回（用于 `mednext_hybrid` 和 body-masked
+指标），不占用网络输入通道。缺失的 OAR/PTV CSV 会补零；PTV70 是最后一个通道，
+用于 validation MAE 的 PTV D97 归一化。
+
+```python
+from dosepy.train import train
+from dosepy.test import test
+
+OPENKBP_ROOT = "/absolute/path/to/DosePy/OpenKBP/provided-data"
+# 在 PortPy 仓库根目录运行时也可以用 "DosePy/OpenKBP/provided-data"
+
+history = train({
+    "dataroot": OPENKBP_ROOT,
+    "dataset_mode": "openkbp",          # 自动设置 input_nc=11
+    "model": "doseprediction3d",
+    "name": "openkbp_unet128",
+    "checkpoints_dir": "/path/to/work/checkpoints",
+    "netG": "unet_128",
+    "dose_loss": "mae",
+    "batch_size": 1,
+    "num_threads": 2,
+    "gpu_ids": [0],
+    "n_epochs": 100,
+    "lr": 1e-4,
+    "plot_loss": True,
+})
+
+summary = test({
+    "dataroot": OPENKBP_ROOT,
+    "dataset_mode": "openkbp",
+    "model": "doseprediction3d",
+    "name": "openkbp_unet128",
+    "checkpoints_dir": "/path/to/work/checkpoints",
+    "results_dir": "/path/to/work/results",
+    "netG": "unet_128",
+    "epoch": "best_mae",
+    "eval": True,
+    "gpu_ids": [0],
+})
+```
+
+说明：
+
+- `train` 自动读取 `train-pats`，验证读取 `validation-pats`，`test` 读取 `test-pats`。
+- 第一次访问某个病人时会把稀疏 CSV 转换成
+  `<dataroot>/.openkbp_cache/<split>/<patient>.npz`，后续 epoch 直接读缓存。
+- CT 按 OpenKBP 的 `HU + 1000` 表示处理：`clip(ct, 0, 4071) / 4071`。
+- `dose.csv` 是总剂量（Gy），直接作为回归目标。
+- 训练中的逐 step loss 仍写入 `train_step_loss.csv`，loss 曲线写入 `loss_curve.png`。
+- `test` 可以用 `patient_metrics.csv` 查看 MAE/RMSE/R²/corr/nRMSE。
+
+#### 6.1.1 统一入口 `OpenKBP/main.py`
+
+`DosePy/OpenKBP/main.py` 是 OpenKBP 唯一的实验入口：数据路径、通道、模型、
+训练参数、推理参数都集中在这个文件里；具体实现全部在 `OpenKBP/` 外部：
+
+| 阶段 | 入口调用 | 源码位置 |
+|---|---|---|
+| 数据预处理 | `prepare_openkbp_cache(...)` | `dosepy/data/openkbp_io.py` |
+| OpenKBP dataset | `OpenKBPDataset` / `dataset_mode="openkbp"` | `dosepy/data/openkbp_dataset.py` |
+| 训练 | `train(options)` | `dosepy/train.py` |
+| 单病例推理 | `predict_openkbp_patient(...)` | `dosepy/infer.py` |
+| 测试集推理/指标 | `test(options)` | `dosepy/test.py` |
+| 单病例评估 | `evaluate_openkbp_dose(...)` | `dosepy/evaluation/openkbp.py` |
+
+`main.py` 中每个阶段都有注释标注调用函数和源码文件。常用命令：
+
+```bash
+# 1) 只生成 .openkbp_cache
+python DosePy/OpenKBP/main.py --stage preprocess
+
+# 2) 训练
+python DosePy/OpenKBP/main.py --stage train
+
+# 3) 单病例推理（默认 pt_241）
+python DosePy/OpenKBP/main.py --stage infer --patient-id pt_241
+
+# 4) 单病例评估（读取上一步的 pred.npz）
+python DosePy/OpenKBP/main.py --stage evaluate --patient-id pt_241
+
+# 5) 整个 test-pats 划分测试 + patient_metrics.csv
+python DosePy/OpenKBP/main.py --stage evaluate
+
+# 6) 预处理 -> 训练 -> 单病例推理 -> 单病例评估
+python DosePy/OpenKBP/main.py --stage all
+```
+
+`OpenKBP/main.py` 中的 `DATA_ROOT`、`CHECKPOINTS_DIR`、`RESULTS_DIR`、`EXPERIMENT`、
+`NET_G`、`NGF`、`GPU_IDS`、`N_EPOCHS` 等常量就是该实验的全部设置；修改这些即可，
+不需要改 `dosepy` 里的通用实现。`OpenKBP/provided-data/` 和 `OpenKBP/work/`
+已在 `.gitignore` 中忽略，只有 `OpenKBP/main.py` 会被跟踪。
+
+### 6.2 PortPy 快速开始
+
 
 ```python
 import sys
@@ -325,6 +467,8 @@ print(opt)
 | `lambda_L1` / `lambda_wL1` / `lambda_masked_wL1` / `lambda_moment` | 各损失权重 |
 | `augment` | 是否做随机 3D 翻转/旋转/平移 |
 | `val_phase` | 验证集子目录名（默认 `val`） |
+| `plot_loss` | 训练中是否实时绘制 loss 曲线，默认 `True` |
+| `plot_freq` | 每 N 个 epoch 刷新/保存一次 loss 曲线，默认 `1` |
 | `epoch`（test） | `latest`、`best_mae` 或数字 epoch |
 
 ### 7.4 训练
@@ -334,11 +478,19 @@ print(opt)
 1. 训练一个 epoch；
 2. 在 val split 上计算 loss、challenge-style MAE、R²、Pearson、nRMSE；
 3. 用 val MAE 驱动 `ReduceLROnPlateau`（`lr_policy="plateau"`）；
-4. 保存 `latest`、按 `save_epoch_freq` 保存数字 epoch、保存 `best_mae`；
-5. 把每个 epoch 的指标写入 `<checkpoints_dir>/<name>/training_history.csv`；
-6. 返回 history dict，可直接用 `plot_training_history(history)` 画图。
+4. **每个 optimizer step** 把 total loss 和各 loss 分量写入并 flush 到 `<checkpoints_dir>/<name>/train_step_loss.csv`（即使关闭绘图也会保存）；
+5. 更新并保存训练/验证 loss 曲线到 `<checkpoints_dir>/<name>/loss_curve.png`（默认开启，三个子图：逐 step loss、逐 epoch loss、验证 MAE）；
+6. 保存 `latest`、按 `save_epoch_freq` 保存数字 epoch、保存 `best_mae`；
+7. 把每个 epoch 的指标写入 `<checkpoints_dir>/<name>/training_history.csv`；
+8. 返回 history dict，可直接用 `plot_training_history(history)` 画图。
 
-checkpoint 命名与 PortPy 兼容：`<epoch>_net_G.pth`，因此 PortPy 预训练权重可以直接用 `epoch="best_mae"` 加载。
+loss 曲线默认开启，可用 `plot_loss=False`（或命令行 `--no_plot_loss`）关闭，
+用 `plot_freq=N` 控制 PNG 刷新频率。`train_step_loss.csv` 始终逐 step 保存，
+因此即使关闭绘图，也能从 CSV 恢复完整的 loss 变化。
+
+checkpoint 命名沿用 PortPy 的 `<epoch>_net_G.pth`；但本版本是 7 通道，
+**不能加载 PortPy 官方 8 通道权重**。DosePy 自己训练的 7 通道 checkpoint
+可以用 `epoch="best_mae"` / `"latest"` 加载。
 
 ### 7.5 测试
 
@@ -393,7 +545,9 @@ dvh_df = dvh_table(pred, gt, structure_masks, prescription_gy=60)
 - `plot_slice_comparison(ct, {"Predicted": pred, "Reference": gt}, structures)`：CT + 预测 + GT + 差分切片；
 - `plot_dvh_comparison({"Predicted": pred, "Reference": gt}, structures)`：多曲线 DVH；
 - `plot_structure_metric_bars(metrics_df, metric="MAE")`：分结构指标柱状图；
-- `plot_training_history(history)`：loss / MAE / R² 曲线；
+- `train_step_loss.csv`：每个 optimizer step 的 total loss + 各 loss 分量；
+- `loss_curve.png`：训练过程中默认更新的逐 step loss / 逐 epoch loss / val MAE 曲线；
+- `plot_training_history(history)`：训练结束后绘制 loss / MAE / R² 曲线；
 - `save_evaluation_report(...)`：一键输出 PNG + CSV + summary；
 - `plot_plan_dvh` / `plot_plan_2d_slice` / `plot_plan_fluence_3d`：PortPy plan 级图的适配器。
 
@@ -429,7 +583,7 @@ s.t.   x ≥ 0
 5. **推理目录隔离**：PortPy 的 `out_dir/infer` 会累积所有病人的 npz，第二次推理会重复跑旧病人；DosePy 改为 `out_dir/infer/<patient_id>/`，每次只推理当前病人。
 6. **验证指标**：新增 `DosePrediction3DModel.calculate_validation_metrics()`（MAE/RMSE/R²/corr/nRMSE），训练和测试使用同一套定义。
 7. **body mask 兜底**：`mednext_hybrid` 在旧 npz 没有 `BODY` 时用 CT 阈值兜底，而不是直接 `None > 0.5` 报错。
-8. **训练日志**：使用 `training_history.csv` 替代多个 `.xlsx`（不再隐式依赖 `openpyxl`），并返回 history dict。
+8. **训练日志**：使用 `training_history.csv` 替代多个 `.xlsx`（不再隐式依赖 `openpyxl`）；新增逐 optimizer step 的 `train_step_loss.csv`，并默认在每个 epoch 更新 `loss_curve.png`（可用 `plot_loss=False` 关闭绘图，但逐 step CSV 仍保留），并返回 history dict。
 9. **推理数据完整性**：`SingleDataset` 现在保留 `BODY` / `PRESCRIPTION_GY` / `SITE`（PortPy 版本在这三个字段上会丢失前两个）。
 10. **推理 npz 不写 `DOSE=None`**：避免 object array 和 `allow_pickle` 问题；读取端仍兼容旧文件。
 11. **范围裁剪**：删除 beamlet-dose（Task 1）模型、2D pix2pix 变换、GAN `ImagePool`、beamlet 专用参数；保留全剂量任务需要的全部代码。
@@ -444,9 +598,11 @@ s.t.   x ≥ 0
 - 训练需要 GPU；CPU 只能跑很小的 smoke test。
 - 下游通量优化默认 MOSEK；没有 License 时用 `solver="SCS"` 或 `"CLARABEL"`，速度较慢。
 - `evaluation/scorecard.py` 的 DVH 插值仍调用 `portpy.photon.Evaluation`，因此需要 PortPy 的 `Plan`；纯预测指标（`metrics.py` / `dvh.py`）不依赖 PortPy。
-- 目前只支持 `lung` / `prostate` 两个 site；新增 site 需要在 `preprocess/site_config.py` 增加配置，并准备对应 scorecard。
+- PortPy 路径目前只支持 `lung` / `prostate` 两个 site；新增 site 需要在 `preprocess/site_config.py` 增加配置，并准备对应 scorecard。OpenKBP 路径是 head-and-neck，使用独立的 `openkbp` dataset。
 - anatomy-only 模型没有 BEAM 先验，通常比 PortPy 官方 8 通道 baseline 更难达到同样精度；这是去掉 beam 信息的预期代价。
 - 旧的 PortPy 8 通道 `.npz` 仍可被本代码忽略 `BEAM` 读取，但旧的 8 通道 checkpoint 不能加载；需要重新训练 7 通道模型。
+- OpenKBP 路径是 head-and-neck、11 通道，与 PortPy lung/prostate 的 7 通道模型和 scorecard 不通用；不要混用 checkpoint。
+- OpenKBP 的 `ct.csv` 按 `HU + 1000` 解释（`clip(ct, 0, 4071) / 4071`）；如果你的数据已经做过其他归一化，请修改 `openkbp_dataset.py` 中的 `OPENKBP_CT_MAX`。
 
 ---
 

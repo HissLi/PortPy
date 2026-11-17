@@ -9,6 +9,10 @@
 predicting a cohort, use :class:`InferenceRunner` instead: the weights are
 loaded once and only the preprocessed ``.npz`` changes.
 
+For OpenKBP, use :func:`predict_openkbp_patient`: it reads one OpenKBP patient
+folder, builds the same 11-channel input as training, and saves
+``DOSE_PRED`` / ``DOSE_GT`` / masks to an ``.npz`` file.
+
 Example::
 
     runner = InferenceRunner({
@@ -27,13 +31,16 @@ Example::
 
 import os
 
+import numpy as np
+import torch
+
 from dosepy.data import create_dataset
 from dosepy.models import create_model
 from dosepy.options import TestOptions, build_opt
 from dosepy.utils import html
 from dosepy.utils.visualizer import save_images
 
-__all__ = ["InferenceRunner", "build_infer_opt"]
+__all__ = ["InferenceRunner", "build_infer_opt", "predict_openkbp_patient"]
 
 NPY_OUT_FNAMES = ["CT2DOSE"]
 
@@ -117,3 +124,125 @@ class InferenceRunner:
 
         webpage.save()
         return written
+
+
+def predict_openkbp_patient(
+    patient_dir: str,
+    checkpoints_dir: str,
+    name: str,
+    netG: str = "unet_128",
+    ngf: int = 64,
+    epoch: str = "best_mae",
+    gpu_ids=None,
+    norm: str = "batch",
+    netG_cfg: str = "",
+    mednext_model_id: str = "B",
+    mednext_kernel_size: int = 3,
+    mednext_n_channels: int = 32,
+    mednext_sites=None,
+    save_path: str = None,
+):
+    """Run one OpenKBP patient through a trained DosePy generator.
+
+    This is the OpenKBP inference entry point.  CSV parsing lives in
+    :mod:`dosepy.data.openkbp_io`; the 11-channel dataset layout is shared with
+    training, but here the input tensor is built directly for a single patient
+    (no DataLoader / no ground-truth dataset required).
+
+    Args:
+        patient_dir: one OpenKBP patient folder, e.g.
+            ``OpenKBP/provided-data/test-pats/pt_241``.
+        checkpoints_dir: directory containing ``<name>/<epoch>_net_G.pth``.
+        name: experiment name.
+        netG: ``unet_128``, ``unet_256``, ``mednext``, ``mednext_attn`` or
+            ``mednext_duo``.
+        ngf: U-Net base channels.
+        epoch: checkpoint selector (``best_mae``, ``latest`` or an integer).
+        gpu_ids: list of GPU ids; ``None`` means CPU.
+        norm: U-Net normalization.
+        netG_cfg: optional JSON string for generator overrides.
+        mednext_model_id / mednext_kernel_size / mednext_n_channels /
+        mednext_sites: MedNeXt constructor options.
+        save_path: optional ``.npz`` output path.
+
+    Returns:
+        Dict with ``pred_dose``, ``gt_dose``, ``body``, ``oar``, ``ptv``,
+        ``voxel_dims``, ``prescription_gy`` and ``patient_id``.
+    """
+    from dosepy.data.openkbp_io import convert_openkbp_patient, OPENKBP_INPUT_NC
+
+    overrides = {
+        "model": "test",
+        "dataset_mode": "single",
+        "input_nc": OPENKBP_INPUT_NC,
+        "output_nc": 1,
+        "netG": netG,
+        "ngf": ngf,
+        "norm": norm,
+        "netG_cfg": netG_cfg,
+        "mednext_model_id": mednext_model_id,
+        "mednext_kernel_size": mednext_kernel_size,
+        "mednext_n_channels": mednext_n_channels,
+        "checkpoints_dir": checkpoints_dir,
+        "name": name,
+        "epoch": epoch,
+        "gpu_ids": [] if gpu_ids is None else gpu_ids,
+        "eval": True,
+    }
+    if mednext_sites is not None:
+        overrides["mednext_sites"] = mednext_sites
+
+    opt = build_opt(TestOptions, overrides)
+    opt.num_threads = 0
+    opt.batch_size = 1
+    opt.serial_batches = True
+    opt.display_id = -1
+
+    model = create_model(opt)
+    model.setup(opt)
+    if opt.eval:
+        model.eval()
+
+    data = convert_openkbp_patient(patient_dir)
+    A = np.concatenate(
+        (data["CT"][None, ...], data["OAR"], data["PTV"]), axis=0
+    ).astype(np.float32)
+    model.set_input({
+        "A": torch.from_numpy(A).unsqueeze(0),
+        "A_paths": patient_dir,
+        "SITE": "openkbp",
+    })
+    with torch.no_grad():
+        model.forward()
+
+    pred_dose = model.fake_Dose[0, 0].detach().cpu().numpy().astype(np.float32)
+    # Dose is non-negative; clipping also keeps downstream DVH metrics sane.
+    pred_dose = np.clip(pred_dose, 0.0, None)
+
+    result = {
+        "patient_id": os.path.basename(os.path.normpath(patient_dir)),
+        "pred_dose": pred_dose,
+        "gt_dose": data["DOSE"].astype(np.float32),
+        "body": data["BODY"].astype(np.uint8),
+        "oar": data["OAR"].astype(np.uint8),
+        "ptv": data["PTV"].astype(np.uint8),
+        "voxel_dims": data["VOXEL_DIMS"].astype(np.float32),
+        "prescription_gy": float(data["PRESCRIPTION_GY"]),
+    }
+
+    if save_path:
+        save_path = os.fspath(save_path)
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+        np.savez_compressed(
+            save_path,
+            DOSE_PRED=result["pred_dose"],
+            DOSE_GT=result["gt_dose"],
+            BODY=result["body"],
+            OAR=result["oar"],
+            PTV=result["ptv"],
+            VOXEL_DIMS=result["voxel_dims"],
+            PRESCRIPTION_GY=np.float32(result["prescription_gy"]),
+        )
+        result["save_path"] = save_path
+
+    return result

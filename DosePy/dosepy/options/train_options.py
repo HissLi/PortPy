@@ -30,6 +30,8 @@ DosePy-specific additions compared with PortPy:
   removed because they do not affect a total-dose model.
 """
 
+import argparse
+
 from dosepy.options.base_options import BaseOptions
 
 __all__ = ["TrainOptions"]
@@ -54,6 +56,15 @@ class TrainOptions(BaseOptions):
         parser.add_argument("--print_freq", type=int, default=100)
         parser.add_argument("--no_html", action="store_true",
                             help="do not save intermediate nrrd/html results")
+        parser.add_argument("--plot_loss", dest="plot_loss", action="store_true",
+                            default=True,
+                            help="draw and refresh the loss curve during training "
+                                 "(enabled by default)")
+        parser.add_argument("--no_plot_loss", dest="plot_loss", action="store_false",
+                            default=argparse.SUPPRESS,
+                            help="disable the live loss curve")
+        parser.add_argument("--plot_freq", type=int, default=1,
+                            help="redraw/save the loss curve every N epochs")
         parser.add_argument("--augment", action="store_true",
                             help="random 3-D flip/rotation/translation augmentation")
 

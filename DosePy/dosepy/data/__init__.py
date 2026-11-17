@@ -23,11 +23,14 @@
 
 """Dataset factory.
 
-Two dataset modes are used by the full-dose pipeline:
+Dataset modes used by the full-dose pipeline:
 
 ``dosepred3d``
-    :class:`~dosepy.data.dosepred3d_dataset.DosePred3DDataset` for training,
-    validation and testing (requires a ground-truth ``DOSE``).
+    :class:`~dosepy.data.dosepred3d_dataset.DosePred3DDataset` for PortPy
+    training, validation and testing (requires a ground-truth ``DOSE``).
+``openkbp``
+    :class:`~dosepy.data.openkbp_dataset.OpenKBPDataset` for OpenKBP CSV
+    folders (11 channels; auto-sets ``input_nc=11``).
 ``single``
     :class:`~dosepy.data.single_dataset.SingleDataset` for inference (no ground
     truth required).
@@ -39,11 +42,13 @@ import torch.utils.data
 
 from dosepy.data.base_dataset import BaseDataset
 from dosepy.data.dosepred3d_dataset import DosePred3DDataset
+from dosepy.data.openkbp_dataset import OpenKBPDataset
 from dosepy.data.single_dataset import SingleDataset
 
 __all__ = [
     "BaseDataset",
     "DosePred3DDataset",
+    "OpenKBPDataset",
     "SingleDataset",
     "find_dataset_using_name",
     "get_option_setter",

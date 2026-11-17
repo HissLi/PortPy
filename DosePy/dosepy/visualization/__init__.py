@@ -15,6 +15,7 @@ from dosepy.visualization.dvh_plots import (
     plot_structure_metric_bars,
 )
 from dosepy.visualization.training_plots import (
+    LossCurvePlotter,
     load_training_history,
     plot_patient_metric_distribution,
     plot_training_history,
@@ -33,6 +34,7 @@ __all__ = [
     "plot_dvh_comparison",
     "plot_structure_metric_bars",
     "plot_training_history",
+    "LossCurvePlotter",
     "load_training_history",
     "plot_patient_metric_distribution",
     "save_evaluation_report",

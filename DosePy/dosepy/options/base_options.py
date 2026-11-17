@@ -64,7 +64,8 @@ class BaseOptions:
         parser.add_argument("--model", type=str, default="doseprediction3d",
                             help="doseprediction3d (train/val/test) or test (inference)")
         parser.add_argument("--input_nc", type=int, default=7,
-                            help="input channels: CT + 5 OAR + PTV = 7 (anatomy-only)")
+                            help="input channels: PortPy anatomy-only=7; OpenKBP dataset "
+                                 "overrides this to 11")
         parser.add_argument("--output_nc", type=int, default=1, help="output channels (dose = 1)")
         parser.add_argument("--ngf", type=int, default=64, help="base filters of the U-Net generators")
         parser.add_argument("--ndf", type=int, default=64, help="unused; kept for CLI compatibility")
@@ -80,7 +81,8 @@ class BaseOptions:
         parser.add_argument("--no_dropout", action="store_true", help="disable U-Net dropout")
         # dataset parameters
         parser.add_argument("--dataset_mode", type=str, default="dosepred3d",
-                            help="dosepred3d (with GT) or single (inference)")
+                            help="dosepred3d (PortPy with GT), openkbp (OpenKBP CSV), "
+                                 "or single (inference)")
         parser.add_argument("--direction", type=str, default="AtoB", help="AtoB or BtoA")
         parser.add_argument("--serial_batches", action="store_true")
         parser.add_argument("--num_threads", default=0, type=int)

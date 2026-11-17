@@ -10,3 +10,21 @@ __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 .DS_Store
+
+# Local conda environment (kept inside DosePy to respect the workspace sandbox)
+.conda/
+
+# Python packaging artifacts
+*.egg-info/
+build/
+dist/
+
+# Local OpenKBP data / generated cache (keep OpenKBP/main.py tracked)
+OpenKBP/provided-data/
+OpenKBP/work/
+OpenKBP/*.npz
+**/.openkbp_cache/
+
+# Keep the OpenKBP experiment entry point; data/work are ignored above
+!OpenKBP/
+!OpenKBP/main.py
